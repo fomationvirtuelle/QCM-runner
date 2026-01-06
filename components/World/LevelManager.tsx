@@ -265,41 +265,11 @@ export const LevelManager: React.FC = () => {
     const newSpawns: GameObject[] = [];
 
     for (const obj of currentObjects) {
-        let moveAmount = dist;
-        
-        if (obj.type === ObjectType.MISSILE) {
-            moveAmount += currentMissileSpeed * safeDelta;
-        }
-
+        const moveAmount = dist;
         const prevZ = obj.position[2];
         obj.position[2] += moveAmount;
-        
-        // --- MAGNET LOGIC ---
-        if (hasMagnet && obj.type === ObjectType.GEM && obj.active) {
-            const lerpSpeed = 5.0 * safeDelta;
-            obj.position[0] = THREE.MathUtils.lerp(obj.position[0], playerPos.x, lerpSpeed);
-            obj.position[2] += 5 * safeDelta;
-        }
 
-        // Robot Enemy Firing Logic
-        if (obj.type === ObjectType.ALIEN && obj.active && !obj.hasFired) {
-             // Shoot when closer
-             // Trigger distance increases with difficulty (snipers!)
-             const triggerDist = -80 - (difficultyFactor * 30);
-             if (obj.position[2] > triggerDist) { 
-                 obj.hasFired = true;
-                 
-                 const spawnX = obj.position[0] - 0.4; // Right arm
-                 newSpawns.push({
-                     id: uuidv4(),
-                     type: ObjectType.MISSILE,
-                     position: [spawnX, 1.8, obj.position[2] + 1], 
-                     active: true,
-                     color: '#ff0000'
-                 });
-                 hasChanges = true;
-             }
-        }
+        // Ennemis ne tirent plus de missiles
 
         let keep = true;
         if (obj.active) {
@@ -316,63 +286,40 @@ export const LevelManager: React.FC = () => {
                 }
             } else if (inZZone) {
                 const dx = Math.abs(obj.position[0] - playerPos.x);
-                if (dx < 0.9) { 
-                     // Collision Logic
-                     const isDamageSource = [ObjectType.OBSTACLE, ObjectType.ALIEN, ObjectType.MISSILE, ObjectType.HAZARD_GATE].includes(obj.type);
-                     
+                if (dx < 0.9) {
+                     // Collision Logic - Uniquement les ennemis (ALIEN) font des dégâts
+                     const isDamageSource = [ObjectType.ALIEN].includes(obj.type);
+
                      if (isDamageSource) {
-                         let isHit = true; 
-                         
-                         // Vertical hitbox check (Jumping over stuff)
-                         if (obj.type === ObjectType.OBSTACLE) {
-                             // Obstacle height is ~1.2. 
-                             // If feet (playerPos.y) are above ~1.0, we treat it as a dodge
-                             // This ensures jumping over the obstacle avoids damage
-                             if (playerPos.y > 1.0) isHit = false;
-                         }
-                         
-                         // Double jump can clear missiles
-                         if (obj.type === ObjectType.MISSILE) {
-                             // Missile at 1.8. Feet need to be high.
-                             if (playerPos.y > 2.0) isHit = false;
+                         let isHit = true;
+
+                         // On peut sauter par-dessus les ennemis
+                         if (obj.type === ObjectType.ALIEN) {
+                             // L'ennemi est à hauteur 2.0
+                             // Si le joueur saute assez haut (pieds au-dessus de 1.5), il peut passer par-dessus
+                             if (playerPos.y > 1.5) isHit = false;
                          }
 
-                         if (isHit) { 
-                             if (obj.type === ObjectType.HAZARD_GATE && isImmortalityActive) {
-                                 // Safe
-                             } else {
-                                window.dispatchEvent(new Event('player-hit'));
-                                obj.active = false; 
-                                hasChanges = true;
-                                
-                                let label = "DANGER !";
-                                if (obj.type === ObjectType.ALIEN) label = "IMPÔTS !";
-                                if (obj.type === ObjectType.MISSILE) label = "DETTE !";
-                                if (obj.type === ObjectType.OBSTACLE) label = "OBSTACLE !";
-                                
-                                spawnFeedback(obj.position, label, "#ef4444", -500);
+                         if (isHit) {
+                            window.dispatchEvent(new Event('player-hit'));
+                            obj.active = false;
+                            hasChanges = true;
 
-                                if (obj.type === ObjectType.MISSILE) {
-                                    window.dispatchEvent(new CustomEvent('particle-burst', { 
-                                        detail: { position: obj.position, color: '#ef4444' } 
-                                    }));
-                                }
-                             }
+                            spawnFeedback(obj.position, "COLLISION !", "#ef4444", -500);
+
+                            window.dispatchEvent(new CustomEvent('particle-burst', {
+                                detail: { position: obj.position, color: '#ef4444' }
+                            }));
                          }
                      } else {
-                         // Collection
+                         // Collection des lettres uniquement
                          const dy = Math.abs(obj.position[1] - (playerPos.y + 0.9));
-                         // Allow collecting gems even if jumping high or low
-                         const vRange = 2.0; 
-                         if (dy < vRange || (hasMagnet && obj.type === ObjectType.GEM && dy < 4.0)) { 
-                            if (obj.type === ObjectType.GEM) {
-                                collectGem(obj.points || 100);
-                                audio.playGemCollect();
-                                spawnFeedback(obj.position, "GAIN", "#ffd700", obj.points || 100);
-                            }
+                         const vRange = 2.0;
+                         if (dy < vRange) {
                             if (obj.type === ObjectType.LETTER && obj.targetIndex !== undefined) {
-                                encounterLetter(obj.targetIndex); 
-                                spawnFeedback(obj.position, "DOSSIER", "#22c55e");
+                                encounterLetter(obj.targetIndex);
+                                audio.playLetterCollect();
+                                spawnFeedback(obj.position, "LETTRE !", "#22c55e");
                             }
                             
                             window.dispatchEvent(new CustomEvent('particle-burst', { 
@@ -446,18 +393,8 @@ export const LevelManager: React.FC = () => {
                  safeZoneUntilRef.current = spawnZ - 5; 
                  
                  hasChanges = true;
-             } else {
-                // If all letters collected, spawn Gem
-                keptObjects.push({
-                    id: uuidv4(),
-                    type: ObjectType.GEM,
-                    position: [lane * LANE_WIDTH, 1.2, spawnZ],
-                    active: true,
-                    color: '#22c55e',
-                    points: 100
-                });
-                hasChanges = true;
              }
+             // Si toutes les lettres sont collectées, ne rien spawner à la place
          } else {
              // ALWAYS SPAWN SOMETHING (No empty rows unless RNG really wants a breather, which we minimize)
              
@@ -465,48 +402,17 @@ export const LevelManager: React.FC = () => {
              const skipChance = Math.max(0, 0.1 - difficultyFactor);
              
              if (Math.random() > skipChance) {
-                
-                // Determine what to spawn
-                // 15% Gems (Rewards)
-                // 85% DANGER
-                
-                if (Math.random() < 0.15) { 
-                     const lane = getRandomLane(laneCount);
-                     keptObjects.push({
-                        id: uuidv4(),
-                        type: ObjectType.GEM,
-                        position: [lane * LANE_WIDTH, 1.0, spawnZ],
-                        active: true,
-                        color: '#22c55e',
-                        points: 100
-                     });
-                } else {
-                    // DANGER SPAWN
-                    const lane = getRandomLane(laneCount);
-                    
-                    // FIXED RATIO: 1 out of 2 (50%)
-                    // It doesn't scale with difficulty anymore to prevent "too many enemies".
-                    // It stays at a constant rhythm of 50% Robot / 50% Static.
-                    const isRobot = Math.random() < 0.5;
+                // Spawn uniquement des ennemis (ALIEN)
+                const lane = getRandomLane(laneCount);
 
-                    if (isRobot) {
-                         keptObjects.push({
-                            id: uuidv4(),
-                            type: ObjectType.ALIEN,
-                            position: [lane * LANE_WIDTH, 2.0, spawnZ],
-                            active: true,
-                            color: '#ef4444'
-                        });
-                    } else {
-                        keptObjects.push({
-                            id: uuidv4(),
-                            type: ObjectType.OBSTACLE,
-                            position: [lane * LANE_WIDTH, 0, spawnZ],
-                            active: true,
-                            color: '#dc2626'
-                        });
-                    }
-                }
+                keptObjects.push({
+                    id: uuidv4(),
+                    type: ObjectType.ALIEN,
+                    position: [lane * LANE_WIDTH, 2.0, spawnZ],
+                    active: true,
+                    color: '#ef4444'
+                });
+
                 hasChanges = true;
              }
          }
@@ -549,12 +455,9 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             const baseHeight = data.position[1];
             const time = state.clock.elapsedTime;
             
-            if (data.type === ObjectType.GEM || data.type === ObjectType.LETTER) {
+            if (data.type === ObjectType.LETTER) {
                 visualRef.current.rotation.y += delta * 3;
                 visualRef.current.position.y = baseHeight;
-            } else if (data.type === ObjectType.MISSILE) {
-                 visualRef.current.rotation.z += delta * 15; 
-                 visualRef.current.position.y = baseHeight;
             } else if (data.type === ObjectType.ALIEN) {
                  visualRef.current.position.y = baseHeight + Math.sin(time * 3) * 0.2;
                  visualRef.current.rotation.y = 0; 
@@ -570,23 +473,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
     return (
         <group ref={groupRef} position={[data.position[0], 0, data.position[2]]}>
             <group ref={visualRef} position={[0, data.position[1], 0]}>
-                
-                {data.type === ObjectType.OBSTACLE && (
-                    <group position={[0, 0.6, 0]}> {/* Lowered visual center for new 1.2 height */}
-                        <mesh geometry={PYRAMID_GEO}>
-                             <meshStandardMaterial 
-                                color="#ff0000" 
-                                emissive="#ff0000" 
-                                emissiveIntensity={2.0} 
-                                roughness={0.2} 
-                                metalness={0.8}
-                             />
-                        </mesh>
-                         <mesh geometry={PYRAMID_GEO} scale={[1.05, 1.05, 1.05]}>
-                             <meshBasicMaterial color="#ffcccc" wireframe transparent opacity={0.3} />
-                        </mesh>
-                    </group>
-                )}
 
                 {data.type === ObjectType.ALIEN && (
                     <group>
@@ -638,35 +524,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                                 <meshStandardMaterial color="#1e293b" />
                             </mesh>
                         </group>
-                    </group>
-                )}
-
-                {data.type === ObjectType.MISSILE && (
-                    <group>
-                        <mesh geometry={SPIKE_GEO}>
-                            <meshStandardMaterial 
-                                color="#ff0000" 
-                                emissive="#ef4444"
-                                emissiveIntensity={4}
-                                transparent
-                                opacity={0.9}
-                            />
-                        </mesh>
-                        <pointLight color="#ff0000" intensity={2} distance={4} decay={2} />
-                    </group>
-                )}
-
-                {data.type === ObjectType.GEM && (
-                    <group>
-                        <mesh geometry={COIN_GEO}>
-                            <meshStandardMaterial 
-                                color="#fbbf24" 
-                                metalness={1} 
-                                roughness={0.2} 
-                                emissive="#d97706"
-                                emissiveIntensity={0.4}
-                            />
-                        </mesh>
                     </group>
                 )}
 
