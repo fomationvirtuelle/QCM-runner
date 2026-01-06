@@ -59,21 +59,22 @@ interface GameState {
   status: GameStatus;
   score: number;
   speed: number;
-  
+
   // Chapter State
   activeChapter: Chapter | null;
   collectedLetters: number[]; // Indices of the letters collected for the ACTIVE chapter
-  
+
   // Global
   level: number; // Used for speed scaling, not chapters anymore
   laneCount: number;
   gemsCollected: number;
   distance: number;
-  
+  playerLane: number; // Current lane for collision detection (instantaneous, not interpolated)
+
   // Quiz State
   currentQuestion: any | null; // Typed loosely here, handled in encounterLetter
-  pendingLetterLetter: number | null; 
-  
+  pendingLetterLetter: number | null;
+
   // Inventory / Roguelite Powers
   hasDoubleJump: boolean;
   hasImmortality: boolean;
@@ -90,15 +91,16 @@ interface GameState {
   takeDamage: () => void;
   addScore: (amount: number) => void;
   collectGem: (value: number) => void;
-  accelerate: (delta: number) => void; 
-  
+  accelerate: (delta: number) => void;
+
   encounterLetter: (index: number) => void;
-  submitAnswer: (optionIndex: number) => boolean; 
+  submitAnswer: (optionIndex: number) => boolean;
   closeFeedback: () => void;
 
   setStatus: (status: GameStatus) => void;
   setDistance: (dist: number) => void;
-  
+  setPlayerLane: (lane: number) => void;
+
   buyItem: (type: 'DOUBLE_JUMP' | 'IMMORTAL' | 'MAGNET' | 'MULTIPLIER', cost: number) => boolean;
   openShop: () => void;
   closeShop: () => void;
@@ -117,7 +119,8 @@ export const useStore = create<GameState>((set, get) => ({
   laneCount: 3,
   gemsCollected: 0,
   distance: 0,
-  
+  playerLane: 0,
+
   currentQuestion: null,
   pendingLetterLetter: null,
 
@@ -126,23 +129,24 @@ export const useStore = create<GameState>((set, get) => ({
   isImmortalityActive: false,
   hasMagnet: false,
   scoreMultiplier: 1,
-  
+
   showTutorial: false,
 
   startGame: (chapterId: string) => {
     const chapter = CEJM_CHAPTERS.find(c => c.id === chapterId);
     if (!chapter) return;
 
-    set({ 
+    set({
         activeChapter: chapter,
-        status: GameStatus.PLAYING, 
-        score: 0, 
+        status: GameStatus.PLAYING,
+        score: 0,
         speed: RUN_SPEED_BASE,
         collectedLetters: [],
         level: 1,
         laneCount: 3,
         gemsCollected: 0,
         distance: 0,
+        playerLane: 0,
         hasDoubleJump: false,
         hasImmortality: false,
         isImmortalityActive: false,
@@ -150,7 +154,7 @@ export const useStore = create<GameState>((set, get) => ({
         scoreMultiplier: 1,
         currentQuestion: null,
         pendingLetterLetter: null,
-        showTutorial: true 
+        showTutorial: true
       });
   },
 
@@ -187,6 +191,8 @@ export const useStore = create<GameState>((set, get) => ({
   }),
 
   setDistance: (dist) => set({ distance: dist }),
+
+  setPlayerLane: (lane) => set({ playerLane: lane }),
 
   encounterLetter: (index) => {
     const { collectedLetters, activeChapter } = get();

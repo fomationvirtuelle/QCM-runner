@@ -167,11 +167,11 @@ const getRandomLane = (laneCount: number) => {
 };
 
 export const LevelManager: React.FC = () => {
-  const { 
-    status, 
-    speed, 
-    collectGem, 
-    encounterLetter, 
+  const {
+    status,
+    speed,
+    collectGem,
+    encounterLetter,
     collectedLetters,
     laneCount,
     setDistance,
@@ -181,7 +181,8 @@ export const LevelManager: React.FC = () => {
     takeDamage,
     showTutorial,
     accelerate,
-    hasMagnet
+    hasMagnet,
+    playerLane
   } = useStore();
   
   const objectsRef = useRef<GameObject[]>([]);
@@ -255,10 +256,14 @@ export const LevelManager: React.FC = () => {
 
     let hasChanges = false;
     let playerPos = new THREE.Vector3(0, 0, 0);
-    
+
     if (playerObjRef.current) {
         playerObjRef.current.getWorldPosition(playerPos);
     }
+
+    // Use target lane position for collision detection (instantaneous, not interpolated)
+    // This prevents false collisions during lane changes
+    const playerX = playerLane * LANE_WIDTH;
 
     const currentObjects = objectsRef.current;
     const keptObjects: GameObject[] = [];
@@ -277,7 +282,7 @@ export const LevelManager: React.FC = () => {
         // --- MAGNET LOGIC ---
         if (hasMagnet && obj.type === ObjectType.GEM && obj.active) {
             const lerpSpeed = 5.0 * safeDelta;
-            obj.position[0] = THREE.MathUtils.lerp(obj.position[0], playerPos.x, lerpSpeed);
+            obj.position[0] = THREE.MathUtils.lerp(obj.position[0], playerX, lerpSpeed);
             obj.position[2] += 5 * safeDelta;
         }
 
@@ -308,14 +313,14 @@ export const LevelManager: React.FC = () => {
             
             if (obj.type === ObjectType.SHOP_PORTAL) {
                 const dz = Math.abs(obj.position[2] - playerPos.z);
-                if (dz < 2) { 
+                if (dz < 2) {
                      openShop();
                      obj.active = false;
                      hasChanges = true;
-                     keep = false; 
+                     keep = false;
                 }
             } else if (inZZone) {
-                const dx = Math.abs(obj.position[0] - playerPos.x);
+                const dx = Math.abs(obj.position[0] - playerX);
                 if (dx < 0.9) { 
                      // Collision Logic
                      const isDamageSource = [ObjectType.OBSTACLE, ObjectType.ALIEN, ObjectType.MISSILE, ObjectType.HAZARD_GATE].includes(obj.type);

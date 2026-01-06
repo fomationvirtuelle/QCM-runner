@@ -26,15 +26,14 @@ export const Player: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
   const shadowRef = useRef<THREE.Mesh>(null);
-  
+
   // Limbs
   const leftLegRef = useRef<THREE.Group>(null);
   const rightLegRef = useRef<THREE.Group>(null);
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
 
-  const { status, laneCount, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, showTutorial } = useStore();
-  const [lane, setLane] = React.useState(0);
+  const { status, laneCount, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, showTutorial, playerLane, setPlayerLane } = useStore();
   const targetX = useRef(0);
   
   const isJumping = useRef(false);
@@ -61,13 +60,13 @@ export const Player: React.FC = () => {
           if (groupRef.current) groupRef.current.position.y = 0;
       }
   }, [status]);
-  
+
   useEffect(() => {
       const maxLane = Math.floor(laneCount / 2);
-      if (Math.abs(lane) > maxLane) {
-          setLane(l => Math.max(Math.min(l, maxLane), -maxLane));
+      if (Math.abs(playerLane) > maxLane) {
+          setPlayerLane(Math.max(Math.min(playerLane, maxLane), -maxLane));
       }
-  }, [laneCount, lane]);
+  }, [laneCount, playerLane, setPlayerLane]);
 
   const triggerJump = () => {
     // Prevent jump if tutorial is showing
@@ -90,13 +89,13 @@ export const Player: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (status !== GameStatus.PLAYING || showTutorial) return;
       const maxLane = Math.floor(laneCount / 2);
-      if (e.key === 'ArrowLeft') setLane(l => Math.max(l - 1, -maxLane));
-      else if (e.key === 'ArrowRight') setLane(l => Math.min(l + 1, maxLane));
+      if (e.key === 'ArrowLeft') setPlayerLane(Math.max(playerLane - 1, -maxLane));
+      else if (e.key === 'ArrowRight') setPlayerLane(Math.min(playerLane + 1, maxLane));
       else if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') triggerJump();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, laneCount, hasDoubleJump, showTutorial]);
+  }, [status, laneCount, hasDoubleJump, showTutorial, playerLane, setPlayerLane]);
 
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
@@ -109,8 +108,8 @@ export const Player: React.FC = () => {
         const deltaY = e.changedTouches[0].clientY - touchStartY.current;
         const maxLane = Math.floor(laneCount / 2);
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 30) {
-             if (deltaX > 0) setLane(l => Math.min(l + 1, maxLane));
-             else setLane(l => Math.max(l - 1, -maxLane));
+             if (deltaX > 0) setPlayerLane(Math.min(playerLane + 1, maxLane));
+             else setPlayerLane(Math.max(playerLane - 1, -maxLane));
         } else if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < -30) {
             triggerJump();
         }
@@ -121,14 +120,14 @@ export const Player: React.FC = () => {
         window.removeEventListener('touchstart', handleTouchStart);
         window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [status, laneCount, showTutorial]);
+  }, [status, laneCount, showTutorial, playerLane, setPlayerLane]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     // Freeze physics if tutorial is open
     if ((status !== GameStatus.PLAYING && status !== GameStatus.SHOP) || showTutorial) return;
 
-    targetX.current = lane * LANE_WIDTH;
+    targetX.current = playerLane * LANE_WIDTH;
     groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetX.current, delta * 15);
 
     if (isJumping.current) {
