@@ -6,10 +6,11 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Zap, Trophy, MapPin, Diamond, Rocket, ArrowUpCircle, Shield, Play, Brain, BookOpen, AlertTriangle, LayoutGrid, CheckCircle2, Briefcase, HandMetal, Smartphone, MousePointer2, Magnet, TrendingUp } from 'lucide-react';
+import { Zap, Trophy, MapPin, Diamond, Rocket, ArrowUpCircle, Shield, Play, Brain, BookOpen, AlertTriangle, LayoutGrid, CheckCircle2, Briefcase, HandMetal, Smartphone, MousePointer2, Magnet, TrendingUp, Settings } from 'lucide-react';
 import { useStore, CEJM_CHAPTERS } from '../../store';
 import { GameStatus, LETTER_PALETTE, ShopItem, RUN_SPEED_BASE } from '../../types';
 import { audio } from '../System/Audio';
+import { QCMManagerScreen } from './QCMManagerScreen';
 
 // Available Shop Items
 const SHOP_ITEMS: ShopItem[] = [
@@ -263,29 +264,55 @@ const ShopScreen: React.FC = () => {
 };
 
 export const HUD: React.FC = () => {
-  const { score, collectedLetters, status, activeChapter, startGame, restartGame, gemsCollected, distance, isImmortalityActive, speed, returnToMenu, showTutorial } = useStore();
-  
+  const { score, collectedLetters, status, activeChapter, startGame, restartGame, gemsCollected, distance, isImmortalityActive, speed, returnToMenu, showTutorial, getAvailableChapters, getActiveQCM } = useStore();
+  const [showQCMManager, setShowQCMManager] = useState(false);
+
   const containerClass = "absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-8 z-50";
+
+  // Afficher l'écran de gestion des QCM
+  if (showQCMManager) {
+    return <QCMManagerScreen onClose={() => setShowQCMManager(false)} />;
+  }
 
   if (status === GameStatus.QUIZ) return <QuizScreen />;
   if (status === GameStatus.FEEDBACK) return <FeedbackScreen />;
   if (status === GameStatus.SHOP) return <ShopScreen />;
 
   if (status === GameStatus.MENU) {
+      const activeQCM = getActiveQCM();
+      const availableChapters = getAvailableChapters();
+
       return (
           <div className="absolute inset-0 z-[100] bg-slate-900 overflow-y-auto pointer-events-auto bg-[url('https://images.unsplash.com/photo-1486406140926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center bg-blend-multiply">
               <div className="min-h-screen flex flex-col items-center p-6 md:p-12 backdrop-blur-sm bg-slate-900/80">
-                  <header className="mb-12 text-center">
+                  <header className="mb-8 text-center">
                     <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400 font-cyber mb-4 drop-shadow-2xl">
-                        CEJM : STARTUP RUN
+                        QCM RUNNER
                     </h1>
-                    <p className="text-blue-200/80 font-sans text-sm md:text-base tracking-widest uppercase">
-                        CHOISISSEZ VOTRE MARCHÉ CIBLE
+                    <p className="text-blue-200/80 font-sans text-sm md:text-base tracking-widest uppercase mb-4">
+                        CHOISISSEZ VOTRE CHAPITRE
                     </p>
+                    {activeQCM && (
+                      <div className="inline-flex items-center gap-2 bg-blue-900/50 px-4 py-2 rounded-full border border-blue-500/30">
+                        <BookOpen className="w-4 h-4 text-blue-300" />
+                        <span className="text-blue-300 text-sm font-bold">{activeQCM.name}</span>
+                      </div>
+                    )}
                   </header>
 
+                  {/* Bouton Gestion des QCM */}
+                  <div className="mb-8">
+                    <button
+                      onClick={() => setShowQCMManager(true)}
+                      className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:scale-105 transition-all shadow-lg"
+                    >
+                      <Settings className="w-5 h-5" />
+                      GÉRER MES QCM
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl w-full">
-                      {CEJM_CHAPTERS.map((chapter) => (
+                      {availableChapters.map((chapter) => (
                           <button
                             key={chapter.id}
                             onClick={() => { audio.init(); startGame(chapter.id); }}

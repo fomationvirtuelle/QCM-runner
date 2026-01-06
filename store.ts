@@ -7,8 +7,16 @@
 
 import { create } from 'zustand';
 import { GameStatus, RUN_SPEED_BASE, Chapter, LETTER_PALETTE } from './types';
+import {
+  QCMSet,
+  loadCustomQCMs,
+  saveCustomQCM,
+  deleteCustomQCM,
+  getActiveQCMId,
+  setActiveQCMId
+} from './utils/storageUtils';
 
-// --- DATA : PROGRAMME CEJM ---
+// --- DATA : PROGRAMME CEJM (Par défaut) ---
 
 const CEJM_CHAPTERS: Chapter[] = [
   {
@@ -55,25 +63,39 @@ const CEJM_CHAPTERS: Chapter[] = [
   }
 ];
 
+// QCM par défaut (CEJM)
+const DEFAULT_QCM: QCMSet = {
+  id: 'default-cejm',
+  name: 'CEJM - Programme par défaut',
+  description: 'Chapitres du programme Culture Économique, Juridique et Managériale',
+  chapters: CEJM_CHAPTERS,
+  createdAt: Date.now(),
+  isDefault: true,
+};
+
 interface GameState {
   status: GameStatus;
   score: number;
   speed: number;
-  
+
   // Chapter State
   activeChapter: Chapter | null;
   collectedLetters: number[]; // Indices of the letters collected for the ACTIVE chapter
-  
+
+  // QCM Management
+  availableQCMs: QCMSet[]; // Liste de tous les QCM (défaut + personnalisés)
+  activeQCMId: string | null; // ID du QCM actuellement sélectionné
+
   // Global
   level: number; // Used for speed scaling, not chapters anymore
   laneCount: number;
   gemsCollected: number;
   distance: number;
-  
+
   // Quiz State
   currentQuestion: any | null; // Typed loosely here, handled in encounterLetter
-  pendingLetterLetter: number | null; 
-  
+  pendingLetterLetter: number | null;
+
   // Inventory / Roguelite Powers
   hasDoubleJump: boolean;
   hasImmortality: boolean;
@@ -105,53 +127,75 @@ interface GameState {
   activateImmortality: () => void;
   returnToMenu: () => void;
   closeTutorial: () => void;
+
+  // QCM Management Actions
+  loadQCMs: () => void;
+  addCustomQCM: (qcm: QCMSet) => void;
+  removeCustomQCM: (qcmId: string) => void;
+  setActiveQCM: (qcmId: string) => void;
+  getActiveQCM: () => QCMSet | null;
+  getAvailableChapters: () => Chapter[];
 }
 
-export const useStore = create<GameState>((set, get) => ({
-  status: GameStatus.MENU,
-  score: 0,
-  speed: 0,
-  activeChapter: null,
-  collectedLetters: [],
-  level: 1,
-  laneCount: 3,
-  gemsCollected: 0,
-  distance: 0,
-  
-  currentQuestion: null,
-  pendingLetterLetter: null,
+export const useStore = create<GameState>((set, get) => {
+  // Initialiser les QCM au démarrage
+  const customQCMs = loadCustomQCMs();
+  const allQCMs = [DEFAULT_QCM, ...customQCMs];
+  const savedActiveQCMId = getActiveQCMId();
+  const initialActiveQCMId = savedActiveQCMId || DEFAULT_QCM.id;
 
-  hasDoubleJump: false,
-  hasImmortality: false,
-  isImmortalityActive: false,
-  hasMagnet: false,
-  scoreMultiplier: 1,
-  
-  showTutorial: false,
+  return {
+    status: GameStatus.MENU,
+    score: 0,
+    speed: 0,
+    activeChapter: null,
+    collectedLetters: [],
+
+    // QCM Management
+    availableQCMs: allQCMs,
+    activeQCMId: initialActiveQCMId,
+
+    level: 1,
+    laneCount: 3,
+    gemsCollected: 0,
+    distance: 0,
+
+    currentQuestion: null,
+    pendingLetterLetter: null,
+
+    hasDoubleJump: false,
+    hasImmortality: false,
+    isImmortalityActive: false,
+    hasMagnet: false,
+    scoreMultiplier: 1,
+
+    showTutorial: false,
 
   startGame: (chapterId: string) => {
-    const chapter = CEJM_CHAPTERS.find(c => c.id === chapterId);
+    // Récupérer les chapitres du QCM actif
+    const chapters = get().getAvailableChapters();
+    const chapter = chapters.find(c => c.id === chapterId);
     if (!chapter) return;
 
-    set({ 
-        activeChapter: chapter,
-        status: GameStatus.PLAYING, 
-        score: 0, 
-        speed: RUN_SPEED_BASE,
-        collectedLetters: [],
-        level: 1,
-        laneCount: 3,
-        gemsCollected: 0,
-        distance: 0,
-        hasDoubleJump: false,
-        hasImmortality: false,
-        isImmortalityActive: false,
-        hasMagnet: false,
-        scoreMultiplier: 1,
-        currentQuestion: null,
-        pendingLetterLetter: null,
-        showTutorial: true 
-      });
+    set({
+      activeChapter: chapter,
+      status: GameStatus.PLAYING,
+      score: 0,
+      speed: RUN_SPEED_BASE,
+      collectedLetters: [],
+      level: 1,
+      laneCount: 3,
+      gemsCollected: 0,
+      distance: 0,
+      hasDoubleJump: false,
+      hasImmortality: false,
+      isImmortalityActive: false,
+      hasMagnet: false,
+      scoreMultiplier: 1,
+      currentQuestion: null,
+      pendingLetterLetter: null,
+      showTutorial: true
+    });
   },
 
   restartGame: () => {
@@ -295,6 +339,43 @@ export const useStore = create<GameState>((set, get) => ({
   closeTutorial: () => set({ showTutorial: false }),
 
   setStatus: (status) => set({ status }),
-}));
 
-export { CEJM_CHAPTERS };
+  // QCM Management Actions
+  loadQCMs: () => {
+    const customQCMs = loadCustomQCMs();
+    const allQCMs = [DEFAULT_QCM, ...customQCMs];
+    set({ availableQCMs: allQCMs });
+  },
+
+  addCustomQCM: (qcm: QCMSet) => {
+    saveCustomQCM(qcm);
+    get().loadQCMs();
+  },
+
+  removeCustomQCM: (qcmId: string) => {
+    deleteCustomQCM(qcmId);
+    get().loadQCMs();
+
+    // Si le QCM supprimé était actif, revenir au défaut
+    if (get().activeQCMId === qcmId) {
+      get().setActiveQCM(DEFAULT_QCM.id);
+    }
+  },
+
+  setActiveQCM: (qcmId: string) => {
+    setActiveQCMId(qcmId);
+    set({ activeQCMId: qcmId });
+  },
+
+  getActiveQCM: (): QCMSet | null => {
+    const { availableQCMs, activeQCMId } = get();
+    return availableQCMs.find(q => q.id === activeQCMId) || null;
+  },
+
+  getAvailableChapters: (): Chapter[] => {
+    const activeQCM = get().getActiveQCM();
+    return activeQCM ? activeQCM.chapters : [];
+  },
+}});
+
+export { CEJM_CHAPTERS, DEFAULT_QCM };
